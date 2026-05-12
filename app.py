@@ -196,12 +196,16 @@ if prompt := st.chat_input(f"Ask your {level} question..."):
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=1024,
-                system=system_prompt,
-                messages=st.session_state.messages
-            )
+            try:
+                response = client.messages.create(
+                    model="claude-haiku-4-5",
+                    max_tokens=1024,
+                    system=system_prompt,
+                    messages=st.session_state.messages
+                )
+            except Exception as e:
+                st.error("Server is busy right now. Please try again in a moment! 🔄")
+                st.stop()
             reply = response.content[0].text
             st.write(reply)
             
