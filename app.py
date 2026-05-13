@@ -19,17 +19,41 @@ dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=True)
 if dark_mode:
     bg_color = "#0D1B2A"
     text_color = "#FFFFFF"
+    input_bg = "#152840"
+    sidebar_bg = "#0D1B2A"
 else:
-    bg_color = "#FFFFFF"
+    bg_color = "#F0F4F8"
     text_color = "#000000"
+    input_bg = "#FFFFFF"
+    sidebar_bg = "#E0E7EF"
 
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: {bg_color}; color: {text_color}; }}
+    .stApp {{ 
+        background-color: {bg_color}; 
+        color: {text_color}; 
+    }}
+    .stChatMessage {{ 
+        color: {text_color}; 
+    }}
+    .stSidebar {{ 
+        background-color: {sidebar_bg};
+        color: {text_color};
+    }}
+    .stSidebar * {{ 
+        color: {text_color} !important; 
+    }}
+    .stTextInput input {{ 
+        background-color: {input_bg};
+        color: {text_color};
+    }}
+    p, h1, h2, h3, label {{ 
+        color: {text_color} !important; 
+    }}
     </style>
     <h1 style="text-align: center; color: #00C9B1;">🎓 Math Tutor</h1>
     <p style="text-align: center; color: gray;">
-    Your Smart Math Tutor | Grade 1 to PhD |Houston TX
+    Your Smart Math Tutor | Grade 1 to PhD | Houston TX
     </p>
     <hr>
 """, unsafe_allow_html=True)
@@ -167,13 +191,14 @@ if st.session_state.current_level != level:
     st.rerun()
 
 # Search history in sidebar
+# Show chat history in sidebar
 st.sidebar.markdown("---")
 st.sidebar.title("📜 Search History")
-if st.session_state.history:
+if len(st.session_state.history) > 0:
     for item in reversed(st.session_state.history[-10:]):
         st.sidebar.markdown(f"• {item}")
 else:
-    st.sidebar.markdown("No history yet")
+    st.sidebar.markdown("Ask a question to see history")
 
 if st.sidebar.button("🗑️ Clear History"):
     st.session_state.history = []
@@ -184,6 +209,31 @@ if st.sidebar.button("🗑️ Clear History"):
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
+
+# File Upload Section
+st.markdown("### 📎 Upload a File (Optional)")
+uploaded_file = st.file_uploader(
+    "Upload PDF or Text file to ask questions about it",
+    type=["pdf", "txt"],
+    key="file_uploader"
+)
+
+if uploaded_file is not None:
+    if uploaded_file.type == "application/pdf":
+        import fitz
+        pdf_bytes = uploaded_file.read()
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        file_text = ""
+        for page in doc:
+            file_text += page.get_text()
+        st.success(f"✅ PDF loaded! {len(file_text)} characters read.")
+    else:
+        file_text = uploaded_file.read().decode("utf-8")
+        st.success(f"✅ File loaded! {len(file_text)} characters read.")
+    st.session_state.file_content = file_text
+
+if "file_content" in st.session_state:
+    st.info("📄 File loaded — your questions will include file context")
 
 # Input
 if prompt := st.chat_input(f"Ask your {level} question..."):
@@ -196,19 +246,26 @@ if prompt := st.chat_input(f"Ask your {level} question..."):
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
+            # Add file context if available
+           # File context
+            if "file_content" in st.session_state:
+                enhanced_system = system_prompt + " " + st.session_state.file_content[:5000]
+            else:
+                enhanced_system = system_prompt
+
             try:
                 response = client.messages.create(
                     model="claude-haiku-4-5",
                     max_tokens=1024,
-                    system=system_prompt,
+                    system=enhanced_system,
                     messages=st.session_state.messages
                 )
             except Exception as e:
-                st.error("Server is busy right now. Please try again in a moment! 🔄")
+                st.error("Server busy. Please try again! 🔄")
                 st.stop()
             reply = response.content[0].text
             st.write(reply)
-            
+
             # Audio player
             from gtts import gTTS
             import base64
@@ -223,6 +280,6 @@ if prompt := st.chat_input(f"Ask your {level} question..."):
             )
 
     st.session_state.messages.append({
-        "role": "assistant", 
+        "role": "assistant",
         "content": reply
     })
